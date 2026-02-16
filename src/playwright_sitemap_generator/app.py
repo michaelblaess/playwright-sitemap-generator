@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 from datetime import datetime
-from pathlib import Path
 from urllib.parse import urlparse
 
 from textual import work
@@ -15,8 +15,11 @@ from textual.widgets import Footer, Header, RichLog
 
 from . import __version__
 from .models.crawl_result import CrawlResult, PageStatus
+from .models.history import History, HistoryEntry
 from .models.settings import Settings
 from .services.crawler import Crawler
+from .services.reporter import Reporter
+from .models.sitemap_reader import discover_sitemap, load_sitemap_urls
 from .models.sitemap_writer import SitemapWriter
 from .widgets.stats_panel import StatsPanel
 from .widgets.summary_panel import SummaryPanel
@@ -34,16 +37,25 @@ class SitemapGeneratorApp(App):
     """TUI-Anwendung zum Crawlen von Websites und Erzeugen von Sitemaps."""
 
     CSS_PATH = "app.tcss"
-    TITLE = f"Playwright Sitemap Generator v{__version__}"
+    TITLE = f"Sitemap Generator v{__version__}"
 
     BINDINGS = [
         Binding("q", "quit", "Beenden"),
         Binding("s", "start_crawl", "Crawl"),
-        Binding("x", "cancel_crawl", "Abbrechen"),
-        Binding("r", "save_sitemap", "Sitemap"),
+        Binding("x", "action_x", "Abbrechen"),
+        Binding("m", "save_sitemap", "Sitemap erstellen"),
+        Binding("o", "toggle_robots", "robots.txt AN"),
+        Binding("p", "toggle_playwright", "Playwright AUS"),
+        Binding("h", "show_history", "History"),
+        Binding("e", "toggle_errors", "Nur Fehler"),
+        Binding("j", "jira_report", "JIRA-Tabelle"),
+        Binding("b", "show_tree", "Seitenbaum"),
+        Binding("f", "sitemap_diff", "Sitemap-Diff"),
+        Binding("d", "copy_detail", "Details kopieren"),
+        Binding("c", "copy_log", "Log kopieren"),
         Binding("l", "toggle_log", "Log"),
-        Binding("plus", "log_bigger", "Log +", key_display="+"),
-        Binding("minus", "log_smaller", "Log -", key_display="-"),
+        Binding("plus", "log_bigger", "+", key_display="+"),
+        Binding("minus", "log_smaller", "-", key_display="-"),
         Binding("i", "show_about", "Info"),
     ]
 
@@ -70,11 +82,15 @@ class SitemapGeneratorApp(App):
         self.max_depth = max_depth
         self.concurrency = concurrency
         self.timeout = timeout
-        self.render = render
         self.headless = headless
-        self.respect_robots = respect_robots
         self.user_agent = user_agent
         self.cookies = cookies or []
+
+        # render/respect_robots: CLI ueberschreibt Settings
+        # CLI --render setzt render=True, sonst aus Settings laden
+        self.render = render if render else self._settings.render
+        # CLI --ignore-robots setzt respect_robots=False, sonst aus Settings laden
+        self.respect_robots = respect_robots if not respect_robots else self._settings.respect_robots
 
         # Theme aus Settings uebernehmen
         self.theme = self._settings.theme
@@ -82,6 +98,7 @@ class SitemapGeneratorApp(App):
         self._crawler: Crawler | None = None
         self._crawl_running: bool = False
         self._results: list[CrawlResult] = []
+        self._official_sitemap_urls: set[str] = set()
         self._log_lines: list[str] = []
         self._log_height: int = LOG_HEIGHT_DEFAULT
         self._stats_timer = None
@@ -102,7 +119,7 @@ class SitemapGeneratorApp(App):
 
     def on_mount(self) -> None:
         """Initialisierung nach dem Starten."""
-        mode = "Playwright (--render)" if self.render else "httpx (schnell)"
+        mode = "Playwright" if self.render else "httpx (schnell)"
         robots_info = "AN" if self.respect_robots else "AUS"
         self._write_log(f"[bold]Playwright Sitemap Generator v{__version__}[/bold]")
         self._write_log(
@@ -116,6 +133,10 @@ class SitemapGeneratorApp(App):
             summary.set_info(self.start_url, mode)
             self.sub_title = self.start_url
 
+        # Binding-Labels initial setzen
+        self._update_robots_binding_label()
+        self._update_playwright_binding_label()
+
         # Focus auf Tabelle
         try:
             from textual.widgets import DataTable
@@ -123,6 +144,45 @@ class SitemapGeneratorApp(App):
             table.focus()
         except Exception:
             pass
+
+    def _update_robots_binding_label(self) -> None:
+        """Aktualisiert das Binding-Label fuer robots.txt Toggle."""
+        label = "robots.txt AN" if self.respect_robots else "robots.txt AUS"
+        bindings_list = self._bindings.key_to_bindings.get("o", [])
+        for i, binding in enumerate(bindings_list):
+            if binding.action == "toggle_robots":
+                self._bindings.key_to_bindings["o"][i] = dataclasses.replace(
+                    binding, description=label
+                )
+                break
+        self.refresh_bindings()
+
+    def _update_playwright_binding_label(self) -> None:
+        """Aktualisiert das Binding-Label fuer Playwright Toggle."""
+        label = "Playwright AN" if self.render else "Playwright AUS"
+        bindings_list = self._bindings.key_to_bindings.get("p", [])
+        for i, binding in enumerate(bindings_list):
+            if binding.action == "toggle_playwright":
+                self._bindings.key_to_bindings["p"][i] = dataclasses.replace(
+                    binding, description=label
+                )
+                break
+        self.refresh_bindings()
+
+    def _update_x_binding_label(self, label: str) -> None:
+        """Aktualisiert das Binding-Label fuer die x-Taste.
+
+        Args:
+            label: Neues Label (z.B. "Abbrechen" oder "Fehlerbericht").
+        """
+        bindings_list = self._bindings.key_to_bindings.get("x", [])
+        for i, binding in enumerate(bindings_list):
+            if binding.action == "action_x":
+                self._bindings.key_to_bindings["x"][i] = dataclasses.replace(
+                    binding, description=label
+                )
+                break
+        self.refresh_bindings()
 
     @work(exclusive=True, group="crawl")
     async def action_start_crawl(self) -> None:
@@ -137,6 +197,7 @@ class SitemapGeneratorApp(App):
 
         self._crawl_running = True
         self._results.clear()
+        self._update_x_binding_label("Abbrechen")
 
         # Log einblenden und leeren
         log_widget = self.query_one("#crawl-log", RichLog)
@@ -147,6 +208,18 @@ class SitemapGeneratorApp(App):
         mode = "Playwright" if self.render else "httpx"
         self._write_log(f"\n[bold]Starte Crawl: {self.start_url}[/bold]")
         self._write_log(f"Modus: {mode} | Tiefe: {self.max_depth} | Concurrency: {self.concurrency}")
+
+        # History-Eintrag speichern
+        History.add(HistoryEntry(
+            url=self.start_url,
+            max_depth=self.max_depth,
+            concurrency=self.concurrency,
+            timeout=self.timeout,
+            render=self.render,
+            respect_robots=self.respect_robots,
+            user_agent=self.user_agent,
+            cookies=self.cookies,
+        ))
 
         self._crawler = Crawler(
             start_url=self.start_url,
@@ -174,6 +247,43 @@ class SitemapGeneratorApp(App):
             """Callback fuer Log-Nachrichten."""
             self._write_log(msg)
 
+        # Offizielle Sitemap autodiscovern (vor dem Crawl)
+        self._official_sitemap_urls.clear()
+        self._write_log("Suche offizielle Sitemap...")
+        try:
+            from .models.robots import RobotsChecker
+            robots = RobotsChecker()
+            await robots.load(self.start_url, cookies=self.cookies)
+            robots_sitemaps = robots.sitemaps if robots.is_loaded else []
+
+            sitemap_url = await discover_sitemap(
+                self.start_url,
+                robots_sitemaps=robots_sitemaps,
+                cookies=self.cookies,
+                log=on_log,
+            )
+            if sitemap_url:
+                self._official_sitemap_urls = await load_sitemap_urls(
+                    sitemap_url, cookies=self.cookies, log=on_log,
+                )
+                self._write_log(
+                    f"[green]Offizielle Sitemap geladen: "
+                    f"{len(self._official_sitemap_urls)} URLs[/green]"
+                )
+        except Exception as e:
+            self._write_log(f"[yellow]Sitemap-Autodiscovery fehlgeschlagen: {e}[/yellow]")
+
+        url_table.set_sitemap_urls(self._official_sitemap_urls)
+
+        # Sitemap-URLs als Seed-URLs in den Crawler einspeisen,
+        # damit auch nicht-verlinkte Seiten gecrawlt werden
+        if self._official_sitemap_urls:
+            added = self._crawler.add_seed_urls(self._official_sitemap_urls)
+            if added:
+                self._write_log(
+                    f"[green]{added} Sitemap-URLs als Seed-URLs hinzugefuegt[/green]"
+                )
+
         self.sub_title = f"Crawling {self.start_url}..."
 
         try:
@@ -186,6 +296,7 @@ class SitemapGeneratorApp(App):
             self.notify(f"Crawl-Fehler: {e}", severity="error")
         finally:
             self._crawl_running = False
+            self._update_x_binding_label("JSON Fehlerbericht")
 
         if not self._crawler:
             # Abgebrochen
@@ -197,13 +308,15 @@ class SitemapGeneratorApp(App):
         stats_panel.update_stats(stats)
         summary.update_stats(stats)
 
-        successful = [r for r in self._results if r.is_successful]
+        http_200 = [r for r in self._results if r.http_status_code == 200]
         self._write_log(
             f"\n[bold green]Crawl abgeschlossen in {stats.duration_display}[/bold green]"
         )
         self._write_log(
-            f"Entdeckt: {stats.total_discovered} | Gecrawlt: {stats.total_crawled} | "
-            f"Fehler: {stats.total_errors} | Fuer Sitemap: {len(successful)}"
+            f"Gecrawlt: {stats.total_crawled} | "
+            f"200er: {stats.total_2xx} | 300er: {stats.total_3xx} | "
+            f"400er: {stats.total_4xx} | 500er: {stats.total_5xx} | "
+            f"Fuer Sitemap: {len(http_200)}"
         )
 
         if stats.urls_per_second > 0:
@@ -217,7 +330,14 @@ class SitemapGeneratorApp(App):
 
         self._crawler = None
 
-    def action_cancel_crawl(self) -> None:
+    def action_action_x(self) -> None:
+        """Doppelbelegung: Waehrend Crawl abbrechen, danach Fehlerbericht erzeugen."""
+        if self._crawl_running and self._crawler:
+            self._do_cancel_crawl()
+        elif self._results:
+            self._do_save_error_report()
+
+    def _do_cancel_crawl(self) -> None:
         """Bricht den laufenden Crawl ab."""
         if not self._crawl_running or not self._crawler:
             self.notify("Kein Crawl aktiv.", severity="warning")
@@ -226,6 +346,49 @@ class SitemapGeneratorApp(App):
         self._crawler.cancel()
         self._write_log("[yellow]Crawl wird abgebrochen...[/yellow]")
         self.notify("Crawl wird abgebrochen...")
+
+    def _do_save_error_report(self) -> None:
+        """Erzeugt und speichert einen JSON-Fehlerbericht."""
+        if not self._results:
+            self.notify("Keine Ergebnisse vorhanden!", severity="warning")
+            return
+
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        hostname = urlparse(self.start_url).hostname or "unknown"
+        hostname = hostname.replace(".", "-")
+        filename = f"fehler_{hostname}_{timestamp}.json"
+
+        errors = [r for r in self._results if r.is_error]
+        if not errors:
+            self._write_log("[green]Keine Fehler gefunden - kein Bericht noetig.[/green]")
+            self.notify("Keine Fehler gefunden!", severity="information")
+            return
+
+        # Stats vom letzten Crawl holen
+        from .models.crawl_result import CrawlStats
+        stats = CrawlStats()
+        # Stats aus den Ergebnissen rekonstruieren
+        stats.total_crawled = len([r for r in self._results if r.status not in (PageStatus.PENDING, PageStatus.MAX_DEPTH, PageStatus.SKIPPED)])
+        stats.total_discovered = len(self._results)
+        for r in self._results:
+            if r.http_status_code:
+                cat = r.http_status_code // 100
+                if cat == 2:
+                    stats.total_2xx += 1
+                elif cat == 3:
+                    stats.total_3xx += 1
+                elif cat == 4:
+                    stats.total_4xx += 1
+                elif cat == 5:
+                    stats.total_5xx += 1
+        stats.total_errors = stats.total_4xx + stats.total_5xx + len([
+            r for r in self._results
+            if r.status in (PageStatus.ERROR, PageStatus.TIMEOUT) and r.http_status_code < 400
+        ])
+
+        Reporter.save_error_report(self._results, stats, self.start_url, filename)
+        self._write_log(f"[green]Fehlerbericht geschrieben: {filename} ({len(errors)} Fehler)[/green]")
+        self.notify(f"Fehlerbericht: {filename} ({len(errors)} Fehler)")
 
     def action_save_sitemap(self) -> None:
         """Speichert die Sitemap als XML-Datei."""
@@ -255,11 +418,116 @@ class SitemapGeneratorApp(App):
             self.notify("Keine Seiten fuer Sitemap!", severity="warning")
             return
 
-        successful = [r for r in self._results if r.is_successful]
+        http_200 = [r for r in self._results if r.http_status_code == 200]
         for path in written:
             self._write_log(f"[green]Sitemap geschrieben: {path}[/green]")
 
-        self.notify(f"Sitemap gespeichert: {written[0]} ({len(successful)} URLs)")
+        self.notify(f"Sitemap gespeichert: {written[0]} ({len(http_200)} URLs)")
+
+    def action_toggle_robots(self) -> None:
+        """Schaltet robots.txt-Beachtung um (AN/AUS)."""
+        self.respect_robots = not self.respect_robots
+
+        if self.respect_robots:
+            self._write_log("[green]robots.txt wird beachtet[/green]")
+        else:
+            self._write_log("[yellow]robots.txt wird ignoriert[/yellow]")
+
+        self._update_robots_binding_label()
+
+        # Einstellung persistent speichern
+        self._settings.respect_robots = self.respect_robots
+        self._settings.save()
+
+    def action_toggle_playwright(self) -> None:
+        """Schaltet Playwright-Rendering um (AN/AUS)."""
+        self.render = not self.render
+
+        if self.render:
+            self._write_log("[green]Playwright-Rendering aktiviert[/green]")
+        else:
+            self._write_log("[yellow]Playwright-Rendering deaktiviert (httpx)[/yellow]")
+
+        self._update_playwright_binding_label()
+
+        # Einstellung persistent speichern
+        self._settings.render = self.render
+        self._settings.save()
+
+    def action_toggle_errors(self) -> None:
+        """Schaltet den Error-Filter in der Tabelle um."""
+        if not self._results:
+            self.notify("Keine Ergebnisse vorhanden.", severity="warning")
+            return
+
+        url_table = self.query_one("#url-table", UrlTable)
+        active = url_table.toggle_error_filter()
+
+        # Detail-Panel zuruecksetzen (ausgewaehlte URL evtl. nicht mehr sichtbar)
+        stats_panel = self.query_one("#stats-panel", StatsPanel)
+        stats_panel.clear_detail()
+
+        if active:
+            self._write_log("[yellow]Zeige nur Fehler[/yellow]")
+            self.notify("Filter: Nur Fehler")
+        else:
+            self._write_log("Zeige alle URLs")
+            self.notify("Filter: Alle URLs")
+
+    def action_copy_log(self) -> None:
+        """Kopiert das Log in die Zwischenablage."""
+        if not self._log_lines:
+            self.notify("Log ist leer.", severity="warning")
+            return
+
+        # Rich-Markup entfernen fuer Clipboard
+        import re
+        clean_lines = []
+        for line in self._log_lines:
+            clean = re.sub(r"\[/?[^\]]*\]", "", line)
+            clean_lines.append(clean)
+
+        text = "\n".join(clean_lines)
+        self.copy_to_clipboard(text)
+        self.notify("Log in Zwischenablage kopiert")
+
+    def action_show_history(self) -> None:
+        """Zeigt den History-Dialog an."""
+        from .screens.history import HistoryScreen
+        self.push_screen(HistoryScreen(), self._on_history_selected)
+
+    def _on_history_selected(self, entry: HistoryEntry | None) -> None:
+        """Callback nach History-Auswahl.
+
+        Args:
+            entry: Der ausgewaehlte HistoryEntry oder None.
+        """
+        if entry is None:
+            return
+
+        self.start_url = entry.url
+        self.max_depth = entry.max_depth
+        self.concurrency = entry.concurrency
+        self.timeout = entry.timeout
+        self.render = entry.render
+        self.respect_robots = entry.respect_robots
+        self.cookies = entry.cookies
+        if entry.user_agent:
+            self.user_agent = entry.user_agent
+
+        # UI aktualisieren
+        mode = "Playwright" if self.render else "httpx (schnell)"
+        summary = self.query_one("#summary", SummaryPanel)
+        summary.set_info(self.start_url, mode)
+        self.sub_title = self.start_url
+
+        self._update_robots_binding_label()
+        self._update_playwright_binding_label()
+
+        self._write_log(
+            f"[bold]History geladen: {self.start_url}[/bold]\n"
+            f"  Modus: {mode} | Tiefe: {self.max_depth} | Concurrency: {self.concurrency}"
+        )
 
     def on_url_table_url_highlighted(self, event: UrlTable.UrlHighlighted) -> None:
         """Aktualisiert das Stats-Panel bei Cursor-Bewegung."""
@@ -288,6 +556,127 @@ class SitemapGeneratorApp(App):
         from .screens.about import AboutScreen
         self.push_screen(AboutScreen())
 
+    def action_jira_report(self) -> None:
+        """Kopiert eine JIRA-Wiki-Tabelle mit Fehlern in die Zwischenablage."""
+        if not self._results:
+            self.notify("Keine Ergebnisse vorhanden!", severity="warning")
+            return
+
+        table_text = Reporter.generate_jira_table(self._results, self.start_url)
+
+        if not table_text:
+            self._write_log("[green]Keine Fehler gefunden - keine JIRA-Tabelle noetig.[/green]")
+            self.notify("Keine Fehler gefunden!", severity="information")
+            return
+
+        self.copy_to_clipboard(table_text)
+        error_count = len([r for r in self._results if r.is_error])
+        self._write_log(f"[green]JIRA-Tabelle kopiert ({error_count} Fehler)[/green]")
+        self.notify(f"JIRA-Tabelle kopiert ({error_count} Fehler)")
+
+    def action_show_tree(self) -> None:
+        """Zeigt den Seitenbaum-Dialog an."""
+        if not self._results:
+            self.notify("Keine Ergebnisse vorhanden!", severity="warning")
+            return
+
+        from .screens.tree import TreeScreen
+        self.push_screen(TreeScreen(
+            self._results, self.start_url, self._official_sitemap_urls,
+        ))
+
+    def action_sitemap_diff(self) -> None:
+        """Kopiert den Sitemap-Diff (fehlende/ueberfluessige URLs) in die Zwischenablage."""
+        if not self._results:
+            self.notify("Keine Ergebnisse vorhanden!", severity="warning")
+            return
+
+        if not self._official_sitemap_urls:
+            self.notify("Keine offizielle Sitemap geladen!", severity="warning")
+            return
+
+        # Nur HTTP-200 Seiten vergleichen
+        crawled_urls = {
+            r.url for r in self._results
+            if r.http_status_code == 200
+        }
+
+        not_in_sitemap = sorted(crawled_urls - self._official_sitemap_urls)
+        not_crawled = sorted(self._official_sitemap_urls - crawled_urls)
+
+        lines: list[str] = []
+        lines.append(f"=== SITEMAP-DIFF ===")
+        lines.append(f"Offizielle Sitemap: {len(self._official_sitemap_urls)} URLs")
+        lines.append(f"Gecrawlt (200er): {len(crawled_urls)} URLs")
+        lines.append("")
+
+        lines.append(f"--- Gecrawlt aber NICHT in Sitemap ({len(not_in_sitemap)}) ---")
+        for url in not_in_sitemap:
+            lines.append(url)
+
+        lines.append("")
+        lines.append(f"--- In Sitemap aber NICHT gecrawlt ({len(not_crawled)}) ---")
+        for url in not_crawled:
+            lines.append(url)
+
+        text = "\n".join(lines)
+        self.copy_to_clipboard(text)
+        self._write_log(
+            f"[green]Sitemap-Diff kopiert: "
+            f"{len(not_in_sitemap)} fehlend in Sitemap, "
+            f"{len(not_crawled)} nicht gecrawlt[/green]"
+        )
+        self.notify(
+            f"Sitemap-Diff: {len(not_in_sitemap)} fehlend, "
+            f"{len(not_crawled)} nicht gecrawlt"
+        )
+
+    def action_copy_detail(self) -> None:
+        """Kopiert die URL-Details der markierten URL in die Zwischenablage."""
+        from .widgets.stats_panel import _sanitize_url
+
+        stats_panel = self.query_one("#stats-panel", StatsPanel)
+        result = stats_panel._selected_result
+
+        if not result:
+            self.notify("Keine URL ausgewaehlt!", severity="warning")
+            return
+
+        safe_url = _sanitize_url(result.url)
+        lines = [
+            f"URL: {safe_url}",
+            f"Status: {result.status_icon} {result.status.value}",
+        ]
+        if result.redirect_url:
+            lines.append(f"Redirect: {_sanitize_url(result.redirect_url)}")
+        lines.extend([
+            f"HTTP: {result.http_status_code if result.http_status_code else '-'}",
+            f"Crawl-Tiefe: {result.depth}",
+            f"Links: {result.links_found}",
+            f"Ladezeit: {f'{result.load_time_ms:.0f}ms' if result.load_time_ms else '-'}",
+        ])
+
+        if result.content_type:
+            lines.append(f"Content-Type: {result.content_type}")
+        if result.last_modified:
+            lines.append(f"Last-Modified: {result.last_modified}")
+        if result.parent_url:
+            lines.append(f"Parent: {_sanitize_url(result.parent_url)}")
+        if result.error_message:
+            lines.append(f"Fehler: {result.error_message}")
+
+        if result.referring_pages:
+            lines.append("")
+            lines.append("Verweisende Seiten:")
+            for ref in result.referring_pages:
+                link_text = ref.get("link_text", "Link")
+                ref_url = _sanitize_url(ref.get("url", ""))
+                lines.append(f'  "{link_text}" \u2192 {ref_url}')
+
+        text = "\n".join(lines)
+        self.copy_to_clipboard(text)
+        self.notify("URL-Details kopiert")
+
     def watch_theme(self, theme_name: str) -> None:
         """Speichert das Theme bei Aenderung persistent.
 
@@ -307,12 +696,26 @@ class SitemapGeneratorApp(App):
         Returns:
             True wenn sichtbar, None wenn versteckt.
         """
-        if action == "cancel_crawl":
-            return True if self._crawl_running else None
+        if action == "action_x":
+            if self._crawl_running:
+                # Label: "Abbrechen"
+                return True
+            if self._results:
+                # Label: "Fehlerbericht"
+                return True
+            return None
         if action == "start_crawl":
             return None if self._crawl_running else True
         if action == "save_sitemap":
             return True if self._results else None
+        if action == "toggle_errors":
+            return True if self._results else None
+        if action in ("jira_report", "show_tree", "copy_detail"):
+            return True if self._results else None
+        if action == "sitemap_diff":
+            return True if self._results and self._official_sitemap_urls else None
+        if action == "show_history":
+            return None if self._crawl_running else True
         return True
 
     async def action_quit(self) -> None:

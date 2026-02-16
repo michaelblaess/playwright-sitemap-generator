@@ -35,10 +35,10 @@ class SitemapWriter:
         Returns:
             Liste der geschriebenen Dateien.
         """
-        # Nur erfolgreiche Seiten mit text/html in die Sitemap
+        # Nur HTTP 200 Seiten mit text/html in die Sitemap
         urls = [
             r for r in self._results
-            if r.is_successful and self._is_html(r)
+            if r.http_status_code == 200 and self._is_html(r)
         ]
 
         if not urls:

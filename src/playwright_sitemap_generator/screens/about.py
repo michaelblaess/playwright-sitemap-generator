@@ -20,9 +20,9 @@ class AboutScreen(ModalScreen):
     }
 
     AboutScreen > Vertical {
-        width: 60;
+        width: 72;
         height: auto;
-        max-height: 30;
+        max-height: 38;
         background: $surface;
         border: thick $accent;
         padding: 1 2;
@@ -60,22 +60,27 @@ class AboutScreen(ModalScreen):
         with Vertical():
             yield Static(f"Playwright Sitemap Generator v{__version__}", id="about-title")
             yield Static(
-                "[bold]Tastenkuerzel:[/bold]\n"
+                "Crawlt eine Website rekursiv und erzeugt eine\n"
+                "XML-Sitemap. Erkennt Dead Links (4xx/5xx),\n"
+                "Timeouts und Redirect-Ketten.\n"
                 "\n"
-                "  s = Crawl starten\n"
-                "  x = Crawl abbrechen\n"
-                "  r = Sitemap speichern\n"
-                "  l = Log ein/aus\n"
-                "  + = Log vergroessern\n"
-                "  - = Log verkleinern\n"
-                "  i = Info (dieser Dialog)\n"
-                "  q = Beenden\n"
+                "[bold]Features:[/bold]\n"
+                "  - Zwei Modi: httpx (schnell) oder Playwright (JS)\n"
+                "  - Dead-Link-Erkennung mit verweisenden Seiten\n"
+                "  - JIRA-Tabelle und JSON-Fehlerbericht Export\n"
+                "  - Seitenbaum mit Mermaid/ASCII Export\n"
+                "  - robots.txt Beachtung (umschaltbar)\n"
+                "  - Crawl-History mit Wiederholung\n"
                 "\n"
-                "[bold]Modi:[/bold]\n"
-                "  httpx (default) - Schnell, nur HTML-Parsing\n"
-                "  --render - Playwright rendert JavaScript\n"
+                "[bold]Alle Tastenkuerzel sind in der Footer-Leiste\n"
+                "am unteren Bildschirmrand sichtbar.[/bold]\n"
                 "\n"
-                "[dim]github.com/michaelblaess/playwright-sitemap-generator[/dim]",
+                "[dim italic]\"Wir muessen lernen, entweder als Brueder\n"
+                " miteinander zu leben oder als Narren\n"
+                " unterzugehen.\"\n"
+                " - Martin Luther King Jr.[/dim italic]\n"
+                "\n"
+                "[dim]https://github.com/michaelblaess/playwright-sitemap-generator[/dim]",
                 id="about-content",
             )
             yield Static("ESC = Schliessen", id="about-footer")

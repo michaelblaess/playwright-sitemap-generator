@@ -16,11 +16,17 @@ class Settings:
 
     def __init__(self) -> None:
         self.theme: str = "textual-dark"
+        self.respect_robots: bool = True
+        self.render: bool = False
 
     def save(self) -> None:
         """Speichert die Einstellungen in eine JSON-Datei."""
         _SETTINGS_DIR.mkdir(parents=True, exist_ok=True)
-        data = {"theme": self.theme}
+        data = {
+            "theme": self.theme,
+            "respect_robots": self.respect_robots,
+            "render": self.render,
+        }
         _SETTINGS_FILE.write_text(json.dumps(data, indent=2), encoding="utf-8")
 
     @classmethod
@@ -35,6 +41,8 @@ class Settings:
             try:
                 data = json.loads(_SETTINGS_FILE.read_text(encoding="utf-8"))
                 settings.theme = data.get("theme", settings.theme)
+                settings.respect_robots = data.get("respect_robots", settings.respect_robots)
+                settings.render = data.get("render", settings.render)
             except Exception:
                 pass
         return settings

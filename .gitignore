@@ -27,6 +27,8 @@ Thumbs.db
 # Tool output
 *.xml
 !pyproject.toml
+log.txt
+fehler_*.json
 
 # PyInstaller
 *.spec

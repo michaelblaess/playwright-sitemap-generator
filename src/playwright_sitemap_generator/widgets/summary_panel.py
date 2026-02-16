@@ -29,16 +29,16 @@ class SummaryPanel(Static):
             stats: Aktuelle CrawlStats.
         """
         parts = [
-            f"Entdeckt: [bold]{stats.total_discovered}[/bold]",
             f"Gecrawlt: [bold]{stats.total_crawled}[/bold]",
+            f"200er: [green]{stats.total_2xx}[/green]",
+            f"300er: [yellow]{stats.total_3xx}[/yellow]",
         ]
-        if stats.total_errors > 0:
-            parts.append(f"Fehler: [bold red]{stats.total_errors}[/bold red]")
-        if stats.total_skipped > 0:
-            parts.append(f"Skip: {stats.total_skipped}")
+        if stats.total_4xx > 0:
+            parts.append(f"400er: [bold red]{stats.total_4xx}[/bold red]")
+        if stats.total_5xx > 0:
+            parts.append(f"500er: [bold red]{stats.total_5xx}[/bold red]")
 
         parts.append(f"Queue: {stats.queue_size}")
-        parts.append(f"Tiefe: {stats.max_depth_reached}")
         parts.append(stats.duration_display)
 
         self.update(" | ".join(parts))
