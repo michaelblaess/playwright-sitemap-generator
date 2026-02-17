@@ -15,8 +15,8 @@ if getattr(sys, "frozen", False):
     if os.path.isdir(_browsers_dir):
         os.environ["PLAYWRIGHT_BROWSERS_PATH"] = _browsers_dir
 
-from . import __version__
-from .app import SitemapGeneratorApp
+from playwright_sitemap_generator import __version__
+from playwright_sitemap_generator.app import SitemapGeneratorApp
 
 
 BANNER = f"""

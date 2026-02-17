@@ -13,7 +13,7 @@ import httpx
 from bs4 import BeautifulSoup
 from playwright.async_api import async_playwright, Browser, Page
 
-from ..models.crawl_result import CrawlResult, CrawlStats, PageStatus
+from ..models.crawl_result import CrawlResult, CrawlStats, PageStatus, friendly_error_message
 from ..models.robots import RobotsChecker
 
 
@@ -349,11 +349,12 @@ class Crawler:
 
             if last_error is not None:
                 result.status = PageStatus.ERROR
-                result.error_message = str(last_error)
+                friendly_msg = friendly_error_message(last_error)
+                result.error_message = friendly_msg
                 result.load_time_ms = (time.monotonic() - start_time) * 1000
                 self._stats.total_errors += 1
                 self._stats.total_crawled += 1
-                log(f"  [red]ERR | {url} | {last_error}[/red]")
+                log(f"  [red]ERR | {url} | {friendly_msg}[/red]")
                 on_result(result)
                 self._stats.queue_size = len(self._queue)
                 return

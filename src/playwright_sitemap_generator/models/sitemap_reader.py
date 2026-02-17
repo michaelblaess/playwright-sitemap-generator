@@ -13,6 +13,8 @@ from urllib.parse import urlparse, urlunparse
 
 import httpx
 
+from .crawl_result import friendly_error_message
+
 
 # Standard-Namespace fuer Sitemaps
 SITEMAP_NS = "http://www.sitemaps.org/schemas/sitemap/0.9"
@@ -152,7 +154,7 @@ async def _load_sitemap_recursive(
 
         xml_content = response.text
     except Exception as e:
-        log(f"  [yellow]Sitemap-Fehler: {e}[/yellow]")
+        log(f"  [yellow]Sitemap-Fehler: {friendly_error_message(e)}[/yellow]")
         return
 
     try:

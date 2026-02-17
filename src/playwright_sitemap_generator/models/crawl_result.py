@@ -6,6 +6,35 @@ from enum import Enum
 from datetime import datetime
 
 
+def friendly_error_message(error: Exception) -> str:
+    """Wandelt technische Netzwerkfehler in benutzerfreundliche Meldungen um.
+
+    Args:
+        error: Die aufgetretene Exception.
+
+    Returns:
+        Verstaendliche Fehlermeldung auf Deutsch.
+    """
+    msg = str(error).lower()
+
+    if "getaddrinfo failed" in msg or "name or service not known" in msg:
+        return "DNS-Fehler: Domain konnte nicht aufgeloest werden (Tippfehler in der URL?)"
+    if "no address associated" in msg:
+        return "DNS-Fehler: Keine IP-Adresse fuer diese Domain gefunden"
+    if "connection refused" in msg or "errno 111" in msg:
+        return "Verbindung abgelehnt: Server antwortet nicht auf diesem Port"
+    if "connection reset" in msg or "errno 104" in msg:
+        return "Verbindung vom Server zurueckgesetzt"
+    if "timed out" in msg or "timeout" in msg:
+        return "Timeout: Server hat nicht rechtzeitig geantwortet"
+    if "ssl" in msg or "certificate" in msg:
+        return f"SSL/TLS-Fehler: {error}"
+    if "too many redirects" in msg or "toomanyredirects" in msg:
+        return "Zu viele Weiterleitungen (Redirect-Schleife?)"
+
+    return str(error)
+
+
 class PageStatus(Enum):
     """Status einer gecrawlten Seite."""
     PENDING = "pending"
