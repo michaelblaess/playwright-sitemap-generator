@@ -47,19 +47,8 @@ TMPFILE=$(mktemp)
 curl -fsSL "$DOWNLOAD_URL" -o "$TMPFILE"
 
 echo "Entpacke..."
-if [[ "$DOWNLOAD_URL" == *.zip ]]; then
-    unzip -qo "$TMPFILE" -d "$INSTALL_DIR"
-else
-    tar -xzf "$TMPFILE" -C "$INSTALL_DIR"
-fi
+tar -xzf "$TMPFILE" -C "$INSTALL_DIR" --strip-components=1
 rm -f "$TMPFILE"
-
-# Wenn Dateien in einem Unterordner liegen, eine Ebene hochziehen
-SUBDIR=$(find "$INSTALL_DIR" -maxdepth 1 -type d ! -path "$INSTALL_DIR" | head -1)
-if [ -n "$SUBDIR" ]; then
-    mv "$SUBDIR"/* "$INSTALL_DIR/" 2>/dev/null || true
-    rmdir "$SUBDIR" 2>/dev/null || true
-fi
 
 # Executable finden und ausfuehrbar machen
 chmod +x "$INSTALL_DIR/sitemap-generator" 2>/dev/null || true
