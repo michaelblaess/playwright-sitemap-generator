@@ -204,6 +204,10 @@ class SitemapGeneratorApp(App):
         self._results.clear()
         self._update_x_binding_label("Abbrechen")
 
+        # URL-Tabelle leeren
+        url_table = self.query_one("#url-table", UrlTable)
+        url_table.clear_results()
+
         # Log einblenden und leeren
         log_widget = self.query_one("#crawl-log", RichLog)
         log_widget.remove_class("hidden")

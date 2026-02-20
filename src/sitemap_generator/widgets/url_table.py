@@ -213,6 +213,16 @@ class UrlTable(Static):
         else:
             count_label.update(f" {shown} von {total} URLs (gefiltert)")
 
+    def clear_results(self) -> None:
+        """Leert alle Ergebnisse und die Tabelle."""
+        self._results.clear()
+        self._filtered.clear()
+        self._row_counter = 0
+        self._filter_text = ""
+        table = self.query_one("#url-data", DataTable)
+        table.clear()
+        self._update_count_label()
+
     def load_results(self, results: list[CrawlResult]) -> None:
         """Laedt alle Ergebnisse in die Tabelle.
 
