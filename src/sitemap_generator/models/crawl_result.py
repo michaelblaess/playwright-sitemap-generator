@@ -13,24 +13,26 @@ def friendly_error_message(error: Exception) -> str:
         error: Die aufgetretene Exception.
 
     Returns:
-        Verstaendliche Fehlermeldung auf Deutsch.
+        Verstaendliche Fehlermeldung.
     """
+    from ..i18n import t
+
     msg = str(error).lower()
 
     if "getaddrinfo failed" in msg or "name or service not known" in msg:
-        return "DNS-Fehler: Domain konnte nicht aufgeloest werden (Tippfehler in der URL?)"
+        return t("error.dns_not_resolved")
     if "no address associated" in msg:
-        return "DNS-Fehler: Keine IP-Adresse fuer diese Domain gefunden"
+        return t("error.dns_no_address")
     if "connection refused" in msg or "errno 111" in msg:
-        return "Verbindung abgelehnt: Server antwortet nicht auf diesem Port"
+        return t("error.connection_refused")
     if "connection reset" in msg or "errno 104" in msg:
-        return "Verbindung vom Server zurueckgesetzt"
+        return t("error.connection_reset")
     if "timed out" in msg or "timeout" in msg:
-        return "Timeout: Server hat nicht rechtzeitig geantwortet"
+        return t("error.timeout")
     if "ssl" in msg or "certificate" in msg:
-        return f"SSL/TLS-Fehler: {error}"
+        return t("error.ssl", error=error)
     if "too many redirects" in msg or "toomanyredirects" in msg:
-        return "Zu viele Weiterleitungen (Redirect-Schleife?)"
+        return t("error.too_many_redirects")
 
     return str(error)
 

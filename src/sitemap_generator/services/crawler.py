@@ -13,6 +13,8 @@ import httpx
 from bs4 import BeautifulSoup
 from playwright.async_api import async_playwright, Browser, Page
 
+from ..i18n import t
+
 from ..models.crawl_result import CrawlResult, CrawlStats, PageStatus, friendly_error_message
 from ..models.robots import RobotsChecker
 
@@ -115,13 +117,13 @@ class Crawler:
 
         # robots.txt laden
         if self.respect_robots:
-            log("Lade robots.txt...")
+            log(t("crawler.loading_robots"))
             await self._robots.load(self.start_url, cookies=self.cookies)
             if self._robots.sitemaps:
-                log(f"  robots.txt: {len(self._robots.sitemaps)} Sitemap(s) gefunden")
-            log("  robots.txt geladen")
+                log(t("crawler.robots_sitemaps", count=len(self._robots.sitemaps)))
+            log(t("crawler.robots_loaded"))
         else:
-            log("robots.txt wird ignoriert (--ignore-robots)")
+            log(t("crawler.robots_ignored"))
 
         # Start-URL in Queue
         self._enqueue(self.start_url, depth=0, parent="")
@@ -134,14 +136,14 @@ class Crawler:
                 if self._enqueue(url, depth=1, parent=self.start_url):
                     seed_added += 1
             if seed_added:
-                log(f"  {seed_added} Seed-URLs aus Sitemap in Queue")
+                log(t("crawler.seed_urls", count=seed_added))
 
         # Browser starten falls Render-Modus
         if self.render:
-            log("Starte Playwright Browser...")
+            log(t("crawler.starting_browser"))
             self._playwright = await async_playwright().start()
             self._browser = await self._launch_browser()
-            log("Browser gestartet")
+            log(t("crawler.browser_started"))
 
         semaphore = asyncio.Semaphore(self.concurrency)
         active_tasks: set[asyncio.Task] = set()
@@ -162,8 +164,8 @@ class Crawler:
                 # Kurz warten wenn nichts in der Queue
                 if not self._queue and active_tasks:
                     done, _ = await asyncio.wait(active_tasks, return_when=asyncio.FIRST_COMPLETED)
-                    for t in done:
-                        active_tasks.discard(t)
+                    for done_task in done:
+                        active_tasks.discard(done_task)
                 elif not active_tasks and not self._queue:
                     break
                 else:
@@ -316,7 +318,7 @@ class Crawler:
             result.error_message = "robots.txt disallowed"
             self._stats.total_skipped += 1
             on_result(result)
-            log(f"  [dim]SKIP (robots.txt): {url}[/dim]")
+            log(t("crawler.skip_robots", url=url))
             return
 
         async with semaphore:
@@ -344,7 +346,7 @@ class Crawler:
                     last_error = e
                     if attempt < self.max_retries:
                         wait = 2 * (attempt + 1)
-                        log(f"  [yellow]Retry {attempt + 1}/{self.max_retries}: {url}[/yellow]")
+                        log(t("crawler.retry", attempt=attempt + 1, max=self.max_retries, url=url))
                         await asyncio.sleep(wait)
 
             if last_error is not None:
@@ -354,7 +356,7 @@ class Crawler:
                 result.load_time_ms = (time.monotonic() - start_time) * 1000
                 self._stats.total_errors += 1
                 self._stats.total_crawled += 1
-                log(f"  [red]ERR | {url} | {friendly_msg}[/red]")
+                log(t("crawler.error", url=url, message=friendly_msg))
                 on_result(result)
                 self._stats.queue_size = len(self._queue)
                 return

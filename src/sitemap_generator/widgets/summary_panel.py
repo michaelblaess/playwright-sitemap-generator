@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from textual.widgets import Static
 
+from ..i18n import t
 from ..models.crawl_result import CrawlStats
 
 
@@ -20,7 +21,7 @@ class SummaryPanel(Static):
             url: Start-URL.
             mode: Crawl-Modus (httpx / Playwright).
         """
-        self.update(f"[bold]{url}[/bold] | Modus: {mode}")
+        self.update(f"[bold]{url}[/bold] | {t('summary.mode', mode=mode)}")
 
     def update_stats(self, stats: CrawlStats) -> None:
         """Aktualisiert die Statistik-Anzeige.
@@ -29,7 +30,7 @@ class SummaryPanel(Static):
             stats: Aktuelle CrawlStats.
         """
         parts = [
-            f"Gecrawlt: [bold]{stats.total_crawled}[/bold]",
+            t("summary.crawled", count=stats.total_crawled),
             f"200er: [green]{stats.total_2xx}[/green]",
             f"300er: [yellow]{stats.total_3xx}[/yellow]",
         ]
@@ -38,7 +39,7 @@ class SummaryPanel(Static):
         if stats.total_5xx > 0:
             parts.append(f"500er: [bold red]{stats.total_5xx}[/bold red]")
 
-        parts.append(f"Queue: {stats.queue_size}")
+        parts.append(f"{t('stats.queue')}: {stats.queue_size}")
         parts.append(stats.duration_display)
 
         self.update(" | ".join(parts))

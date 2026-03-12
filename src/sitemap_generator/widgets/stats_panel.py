@@ -12,6 +12,7 @@ from rich.text import Text
 from textual.app import ComposeResult
 from textual.widgets import Static
 
+from ..i18n import t
 from ..models.crawl_result import CrawlResult, CrawlStats, PageStatus
 
 
@@ -54,7 +55,7 @@ class StatsPanel(Static):
 
     def compose(self) -> ComposeResult:
         """Erstellt das Panel-Layout."""
-        yield Static("Feuer frei - [bold]s[/bold] drücken, um den Scan zu starten", id="stats-content")
+        yield Static(t("stats.ready"), id="stats-content")
         yield Static("", id="url-detail")
 
     def update_stats(self, stats: CrawlStats) -> None:
@@ -69,19 +70,19 @@ class StatsPanel(Static):
         table.add_column("Key", style="bold", width=18)
         table.add_column("Value")
 
-        table.add_row("Entdeckt", str(stats.total_discovered))
-        table.add_row("Gecrawlt", str(stats.total_crawled))
+        table.add_row(t("stats.discovered"), str(stats.total_discovered))
+        table.add_row(t("stats.crawled"), str(stats.total_crawled))
         table.add_row("2xx (OK)", f"[green]{stats.total_2xx}[/green]" if stats.total_2xx else "0")
         table.add_row("3xx (Redirect)", f"[yellow]{stats.total_3xx}[/yellow]" if stats.total_3xx else "0")
         table.add_row("4xx (Not Found)", f"[red]{stats.total_4xx}[/red]" if stats.total_4xx else "0")
         table.add_row("5xx (Server)", f"[red]{stats.total_5xx}[/red]" if stats.total_5xx else "0")
-        table.add_row("Uebersprungen", str(stats.total_skipped))
-        table.add_row("Queue", str(stats.queue_size))
-        table.add_row("Max Tiefe", str(stats.max_depth_reached))
-        table.add_row("Dauer", stats.duration_display)
+        table.add_row(t("stats.skipped"), str(stats.total_skipped))
+        table.add_row(t("stats.queue"), str(stats.queue_size))
+        table.add_row(t("stats.max_depth"), str(stats.max_depth_reached))
+        table.add_row(t("stats.duration"), stats.duration_display)
 
         if stats.urls_per_second > 0:
-            table.add_row("URLs/Sek", f"{stats.urls_per_second:.1f}")
+            table.add_row(t("stats.urls_per_sec"), f"{stats.urls_per_second:.1f}")
 
         content = self.query_one("#stats-content", Static)
         content.update(table)
@@ -138,47 +139,47 @@ class StatsPanel(Static):
         # auch wenn der angezeigte Text auf mehrere Zeilen umbricht.
         safe_url = _sanitize_url(result.url)
         renderables.append(self._detail_line(
-            "URL", safe_url, "bold", link_url=safe_url,
+            t("detail.url"), safe_url, "bold", link_url=safe_url,
         ))
         renderables.append(self._detail_line(
-            "Status", f"{result.status_icon} {result.status.value}",
+            t("detail.status"), f"{result.status_icon} {result.status.value}",
         ))
         if result.redirect_url:
             safe_redirect = _sanitize_url(result.redirect_url)
             renderables.append(self._detail_line(
-                "Redirect", safe_redirect, link_url=safe_redirect,
+                t("detail.redirect"), safe_redirect, link_url=safe_redirect,
             ))
         renderables.append(self._detail_line(
-            "HTTP", str(result.http_status_code) if result.http_status_code else "-",
+            t("detail.http"), str(result.http_status_code) if result.http_status_code else "-",
         ))
-        renderables.append(self._detail_line("Crawl-Tiefe", str(result.depth)))
-        renderables.append(self._detail_line("Links", str(result.links_found)))
+        renderables.append(self._detail_line(t("detail.depth"), str(result.depth)))
+        renderables.append(self._detail_line(t("detail.links"), str(result.links_found)))
         renderables.append(self._detail_line(
-            "Ladezeit",
+            t("detail.load_time"),
             f"{result.load_time_ms:.0f}ms" if result.load_time_ms else "-",
         ))
-        form_value = "Ja" if result.has_form else "Nein"
+        form_value = t("detail.form_yes") if result.has_form else t("detail.form_no")
         form_style = "green" if result.has_form else "dim"
-        renderables.append(self._detail_line("Formular", form_value, form_style))
+        renderables.append(self._detail_line(t("detail.form"), form_value, form_style))
 
         if result.content_type:
-            renderables.append(self._detail_line("Content-Type", result.content_type))
+            renderables.append(self._detail_line(t("detail.content_type"), result.content_type))
         if result.last_modified:
-            renderables.append(self._detail_line("Last-Modified", result.last_modified))
+            renderables.append(self._detail_line(t("detail.last_modified"), result.last_modified))
         if result.parent_url:
             safe_parent = _sanitize_url(result.parent_url)
             renderables.append(self._detail_line(
-                "Parent", safe_parent, link_url=safe_parent,
+                t("detail.parent"), safe_parent, link_url=safe_parent,
             ))
         if result.error_message:
-            renderables.append(self._detail_line("Fehler", result.error_message, "red"))
+            renderables.append(self._detail_line(t("detail.error"), result.error_message, "red"))
 
-        renderables.append(Text("CTRL+Klick auf URLs zum Oeffnen im Browser", style="dim italic"))
+        renderables.append(Text(t("detail.ctrl_click"), style="dim italic"))
 
         # Verweisende Seiten nur fuer 4xx/5xx Fehler anzeigen
         if result.referring_pages and result.http_status_code >= 400:
             renderables.append(Rule(style="dim"))
-            ref_lines = [Text("Verweisende Seiten:", style="bold")]
+            ref_lines = [Text(t("detail.referring_pages"), style="bold")]
             for ref in result.referring_pages:
                 link_text = ref.get("link_text", "").strip() or "Link"
                 ref_url = _sanitize_url(ref.get("url", ""))

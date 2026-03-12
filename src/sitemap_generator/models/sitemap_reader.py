@@ -14,6 +14,7 @@ from urllib.parse import urlparse, urlunparse
 
 import httpx
 
+from ..i18n import t
 from .crawl_result import friendly_error_message
 
 
@@ -71,22 +72,22 @@ async def discover_sitemap(
         # Phase 1: robots.txt Sitemap-Eintraege (bereits vom Crawler geladen)
         if robots_sitemaps:
             for sitemap_url in robots_sitemaps:
-                log(f"  Pruefe robots.txt Sitemap: {sitemap_url}")
+                log(t("sitemap_reader.check_robots", url=sitemap_url))
                 if await _is_valid_sitemap(client, sitemap_url):
-                    log(f"  [green]Sitemap gefunden: {sitemap_url}[/green]")
+                    log(t("sitemap_reader.found", url=sitemap_url))
                     return sitemap_url
-                log(f"  {sitemap_url} nicht erreichbar, weiter...")
+                log(t("sitemap_reader.unreachable", url=sitemap_url))
 
         # Phase 2: Typische Pfade durchprobieren
-        log("  Probiere typische Sitemap-Pfade...")
+        log(t("sitemap_reader.trying_paths"))
         for path in _COMMON_SITEMAP_PATHS:
             candidate = f"{origin}{path}"
-            log(f"  Teste: {candidate}")
+            log(t("sitemap_reader.testing", url=candidate))
             if await _is_valid_sitemap(client, candidate):
-                log(f"  [green]Sitemap gefunden: {candidate}[/green]")
+                log(t("sitemap_reader.found", url=candidate))
                 return candidate
 
-    log("  [yellow]Keine offizielle Sitemap gefunden[/yellow]")
+    log(t("sitemap_reader.not_found"))
     return None
 
 
@@ -144,24 +145,24 @@ async def _load_sitemap_recursive(
         depth: Aktuelle Rekursionstiefe (max 3).
     """
     if depth > 3:
-        log(f"  [yellow]Max Sitemap-Tiefe erreicht: {sitemap_url}[/yellow]")
+        log(t("sitemap_reader.max_depth", url=sitemap_url))
         return
 
     try:
         response = await client.get(sitemap_url)
         if response.status_code != 200:
-            log(f"  [yellow]Sitemap HTTP {response.status_code}: {sitemap_url}[/yellow]")
+            log(t("sitemap_reader.http_error", code=response.status_code, url=sitemap_url))
             return
 
         xml_content = response.text
     except Exception as e:
-        log(f"  [yellow]Sitemap-Fehler: {friendly_error_message(e)}[/yellow]")
+        log(t("sitemap_reader.fetch_error", error=friendly_error_message(e)))
         return
 
     try:
         root = ET.fromstring(xml_content)
     except ET.ParseError as e:
-        log(f"  [yellow]Sitemap-XML-Fehler: {e}[/yellow]")
+        log(t("sitemap_reader.xml_error", error=e))
         return
 
     # Sitemap-Index: enthaelt <sitemap><loc>...</loc></sitemap>
@@ -171,7 +172,7 @@ async def _load_sitemap_recursive(
         sub_sitemaps = root.findall("sitemap/loc")
 
     if sub_sitemaps:
-        log(f"  Sitemap-Index: {len(sub_sitemaps)} Sub-Sitemaps")
+        log(t("sitemap_reader.index_count", count=len(sub_sitemaps)))
         for entry in sub_sitemaps:
             if entry.text:
                 sub_url = entry.text.strip()
@@ -188,7 +189,7 @@ async def _load_sitemap_recursive(
         if entry.text:
             urls.add(entry.text.strip())
 
-    log(f"  Sitemap geladen: {len(url_entries)} URLs aus {sitemap_url}")
+    log(t("sitemap_reader.loaded", count=len(url_entries), url=sitemap_url))
 
 
 def load_sitemap_from_file(
@@ -211,20 +212,20 @@ def load_sitemap_from_file(
         log = lambda msg: None
 
     if not os.path.isfile(file_path):
-        log(f"  [red]Datei nicht gefunden: {file_path}[/red]")
+        log(t("sitemap_reader.file_not_found", path=file_path))
         return "", set()
 
     try:
         with open(file_path, "r", encoding="utf-8") as f:
             xml_content = f.read()
     except Exception as e:
-        log(f"  [red]Datei-Lesefehler: {e}[/red]")
+        log(t("sitemap_reader.file_read_error", error=e))
         return "", set()
 
     try:
         root = ET.fromstring(xml_content)
     except ET.ParseError as e:
-        log(f"  [red]XML-Fehler: {e}[/red]")
+        log(t("sitemap_reader.file_xml_error", error=e))
         return "", set()
 
     # URLs extrahieren (mit und ohne Namespace)
@@ -238,7 +239,7 @@ def load_sitemap_from_file(
             urls.add(entry.text.strip())
 
     if not urls:
-        log(f"  [yellow]Keine URLs in Datei gefunden[/yellow]")
+        log(t("sitemap_reader.file_no_urls"))
         return "", set()
 
     # Basis-URL aus den URLs ermitteln (Schema + Domain der ersten URL)
@@ -246,8 +247,8 @@ def load_sitemap_from_file(
     parsed = urlparse(first_url)
     base_url = urlunparse((parsed.scheme, parsed.netloc, "/", "", "", ""))
 
-    log(f"  [green]{len(urls)} URLs aus Datei geladen[/green]")
-    log(f"  Basis-URL: {base_url}")
+    log(t("sitemap_reader.file_loaded", count=len(urls)))
+    log(t("sitemap_reader.file_base_url", url=base_url))
 
     return base_url, urls
 

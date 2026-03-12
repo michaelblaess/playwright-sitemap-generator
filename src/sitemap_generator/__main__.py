@@ -16,37 +16,37 @@ if getattr(sys, "frozen", False):
         os.environ["PLAYWRIGHT_BROWSERS_PATH"] = _browsers_dir
 
 from sitemap_generator import __version__
-from sitemap_generator.app import SitemapGeneratorApp
-
-
-BANNER = f"""
-  Sitemap Generator v{__version__}
-  Crawlt Websites und generiert standardkonforme sitemap.xml Dateien
-"""
-
-USAGE_EXAMPLES = """
-Beispiele:
-  sitemap-generator https://example.com
-  sitemap-generator https://example.com --render
-  sitemap-generator https://example.com --max-depth 5 --concurrency 16
-  sitemap-generator https://example.com --output sitemap.xml
-  sitemap-generator https://example.com --ignore-robots
-  sitemap-generator https://example.com --cookie auth=token123
-  sitemap-generator sitemap_example.xml --cookie auth=token123
-
-Tastenkuerzel in der TUI:
-  s = Crawl starten    x = Crawl abbrechen    r = Sitemap speichern
-  l = Log ein/aus      + / - = Log-Hoehe
-  i = Info             q = Beenden
-"""
+from sitemap_generator.i18n import load_locale, t
+from sitemap_generator.models.settings import Settings
 
 
 def main() -> None:
     """Haupteinstiegspunkt fuer die CLI."""
+    # Sprache aus Settings laden (fuer CLI-Hilfe)
+    settings = Settings.load()
+
+    # Vorab --lang aus sys.argv parsen (vor argparse),
+    # damit Banner und Hilfetexte uebersetzt sind
+    lang = settings.language
+    for i, arg in enumerate(sys.argv[1:]):
+        if arg == "--lang" and i + 1 < len(sys.argv[1:]):
+            lang = sys.argv[i + 2]
+            break
+        if arg.startswith("--lang="):
+            lang = arg.split("=", 1)[1]
+            break
+
+    load_locale(lang)
+
+    # Sprache in Settings persistieren
+    if lang != settings.language:
+        settings.language = lang
+        settings.save()
+
     parser = argparse.ArgumentParser(
         prog="sitemap-generator",
-        description=BANNER,
-        epilog=USAGE_EXAMPLES,
+        description=t("cli.banner", version=__version__),
+        epilog=t("cli.examples"),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
 
@@ -55,65 +55,71 @@ def main() -> None:
         nargs="?",
         default="",
         metavar="URL",
-        help="Start-URL der Website (z.B. https://example.com) oder Pfad zu einer Sitemap-XML-Datei",
+        help=t("cli.url_help"),
     )
     parser.add_argument(
         "--output", "-o",
         default="",
         metavar="PATH",
-        help="Ausgabe-Pfad fuer sitemap.xml (default: sitemap.xml im CWD)",
+        help=t("cli.output_help"),
     )
     parser.add_argument(
         "--max-depth", "-d",
         type=int,
         default=10,
         metavar="N",
-        help="Maximale Crawl-Tiefe (default: 10)",
+        help=t("cli.max_depth_help"),
     )
     parser.add_argument(
         "--concurrency", "-c",
         type=int,
         default=8,
         metavar="N",
-        help="Max parallele Requests (default: 8)",
+        help=t("cli.concurrency_help"),
     )
     parser.add_argument(
         "--timeout", "-t",
         type=int,
         default=30,
         metavar="SEC",
-        help="Timeout pro Seite in Sekunden (default: 30)",
+        help=t("cli.timeout_help"),
     )
     parser.add_argument(
         "--render",
         action="store_true",
         default=False,
-        help="JavaScript mit Playwright rendern (langsamer, aber vollstaendiger)",
+        help=t("cli.render_help"),
     )
     parser.add_argument(
         "--no-headless",
         action="store_true",
         default=False,
-        help="Browser sichtbar starten (Debugging)",
+        help=t("cli.no_headless_help"),
     )
     parser.add_argument(
         "--ignore-robots",
         action="store_true",
         default=False,
-        help="robots.txt ignorieren",
+        help=t("cli.ignore_robots_help"),
     )
     parser.add_argument(
         "--user-agent",
         default="",
         metavar="UA",
-        help="Custom User-Agent String",
+        help=t("cli.user_agent_help"),
     )
     parser.add_argument(
         "--cookie",
         action="append",
         default=[],
         metavar="NAME=VALUE",
-        help="Cookie setzen (z.B. --cookie auth=token). Mehrfach verwendbar.",
+        help=t("cli.cookie_help"),
+    )
+    parser.add_argument(
+        "--lang",
+        default=lang,
+        choices=["de", "en"],
+        help="Sprache / Language (de, en)",
     )
 
     args = parser.parse_args()
@@ -122,7 +128,7 @@ def main() -> None:
     cookies = []
     for cookie_str in args.cookie:
         if "=" not in cookie_str:
-            print(f"Ungueltig: --cookie {cookie_str} (Format: NAME=VALUE)")
+            print(t("cli.invalid_cookie", cookie=cookie_str))
             sys.exit(1)
         name, value = cookie_str.split("=", 1)
         cookies.append({"name": name.strip(), "value": value.strip()})
@@ -133,6 +139,8 @@ def main() -> None:
     if start_url and os.path.isfile(start_url) and start_url.lower().endswith(".xml"):
         sitemap_file = os.path.abspath(start_url)
         start_url = ""  # Wird aus der XML-Datei ermittelt
+
+    from sitemap_generator.app import SitemapGeneratorApp
 
     app = SitemapGeneratorApp(
         start_url=start_url,

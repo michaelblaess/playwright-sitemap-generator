@@ -6,6 +6,7 @@ import json
 from datetime import datetime
 from urllib.parse import urlparse
 
+from ..i18n import t
 from ..models.crawl_result import CrawlResult, CrawlStats, PageStatus
 
 
@@ -126,7 +127,7 @@ class Reporter:
         if not errors:
             return ""
 
-        lines = ["||URL||HTTP||Fehler||Verweisende Seiten||"]
+        lines = [t("jira.header")]
 
         for r in errors:
             http_code = str(r.http_status_code) if r.http_status_code else "-"

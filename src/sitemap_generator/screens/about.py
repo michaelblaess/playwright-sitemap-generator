@@ -9,6 +9,7 @@ from textual.screen import ModalScreen
 from textual.widgets import Static
 
 from .. import __version__
+from ..i18n import t
 
 
 class AboutScreen(ModalScreen):
@@ -51,8 +52,8 @@ class AboutScreen(ModalScreen):
     """
 
     BINDINGS = [
-        Binding("escape", "close", "Schliessen"),
-        Binding("q", "close", "Schliessen"),
+        Binding("escape", "close", "Close"),
+        Binding("q", "close", "Close"),
     ]
 
     def compose(self) -> ComposeResult:
@@ -60,30 +61,14 @@ class AboutScreen(ModalScreen):
         with Vertical():
             yield Static(f"Sitemap Generator v{__version__}", id="about-title")
             yield Static(
-                "Crawlt eine Website rekursiv und erzeugt eine\n"
-                "XML-Sitemap. Erkennt Dead Links (4xx/5xx),\n"
-                "Timeouts und Redirect-Ketten.\n"
+                f"{t('about.description')}\n"
                 "\n"
-                "[bold]Features:[/bold]\n"
-                "  - Zwei Modi: httpx (schnell) oder Playwright (JS)\n"
-                "  - Dead-Link-Erkennung mit verweisenden Seiten\n"
-                "  - JIRA-Tabelle und JSON-Fehlerbericht Export\n"
-                "  - Seitenbaum mit Mermaid/ASCII Export\n"
-                "  - robots.txt Beachtung (umschaltbar)\n"
-                "  - Crawl-History mit Wiederholung\n"
-                "\n"
-                "[bold]Alle Tastenkuerzel sind in der Footer-Leiste\n"
-                "am unteren Bildschirmrand sichtbar.[/bold]\n"
-                "\n"
-                "[dim italic]\"Wir muessen lernen, entweder als Brueder\n"
-                " miteinander zu leben oder als Narren\n"
-                " unterzugehen.\"\n"
-                " - Martin Luther King Jr.[/dim italic]\n"
+                f"{t('about.quote')}\n"
                 "\n"
                 "[dim]https://github.com/michaelblaess/sitemap-generator[/dim]",
                 id="about-content",
             )
-            yield Static("ESC = Schliessen", id="about-footer")
+            yield Static(t("about.footer"), id="about-footer")
 
     def action_close(self) -> None:
         """Schliesst den Dialog."""

@@ -18,6 +18,7 @@ class Settings:
         self.theme: str = "textual-dark"
         self.respect_robots: bool = True
         self.render: bool = False
+        self.language: str = "de"
 
     def save(self) -> None:
         """Speichert die Einstellungen in eine JSON-Datei."""
@@ -26,6 +27,7 @@ class Settings:
             "theme": self.theme,
             "respect_robots": self.respect_robots,
             "render": self.render,
+            "language": self.language,
         }
         _SETTINGS_FILE.write_text(json.dumps(data, indent=2), encoding="utf-8")
 
@@ -43,6 +45,7 @@ class Settings:
                 settings.theme = data.get("theme", settings.theme)
                 settings.respect_robots = data.get("respect_robots", settings.respect_robots)
                 settings.render = data.get("render", settings.render)
+                settings.language = data.get("language", settings.language)
             except Exception:
                 pass
         return settings

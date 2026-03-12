@@ -17,6 +17,7 @@ from textual.containers import Vertical
 from textual.screen import ModalScreen
 from textual.widgets import Static, Tree
 
+from ..i18n import t
 from ..models.crawl_result import CrawlResult, PageStatus
 
 
@@ -62,12 +63,12 @@ class TreeScreen(ModalScreen):
     """
 
     BINDINGS = [
-        Binding("escape", "close", "Schliessen"),
-        Binding("q", "close", "Schliessen"),
-        Binding("m", "copy_mermaid", "Mermaid kopieren"),
-        Binding("a", "copy_ascii", "ASCII kopieren"),
-        Binding("e", "expand_all", "Alles aufklappen"),
-        Binding("c", "collapse_all", "Alles einklappen"),
+        Binding("escape", "close", "Close"),
+        Binding("q", "close", "Close"),
+        Binding("m", "copy_mermaid", "Mermaid"),
+        Binding("a", "copy_ascii", "ASCII"),
+        Binding("e", "expand_all", "+"),
+        Binding("c", "collapse_all", "-"),
     ]
 
     def __init__(
@@ -90,12 +91,9 @@ class TreeScreen(ModalScreen):
         self._build_tree_data()
 
         with Vertical():
-            yield Static("Seitenbaum", id="tree-title")
-            yield Tree("Seiten", id="site-tree")
-            yield Static(
-                "m = Mermaid  |  a = ASCII  |  e = Aufklappen  |  c = Einklappen  |  ESC/q = Schliessen",
-                id="tree-footer",
-            )
+            yield Static(t("tree.title"), id="tree-title")
+            yield Tree(t("tree.root_label"), id="site-tree")
+            yield Static(t("tree.footer"), id="tree-footer")
 
     def on_mount(self) -> None:
         """Baut den Textual-Tree nach dem Mounten auf."""
@@ -103,7 +101,7 @@ class TreeScreen(ModalScreen):
         tree_widget.root.expand()
 
         if not self._root_url:
-            tree_widget.root.set_label("Keine Daten")
+            tree_widget.root.set_label(t("tree.no_data"))
             return
 
         root_result = self._url_to_result.get(self._root_url)
@@ -240,7 +238,7 @@ class TreeScreen(ModalScreen):
     def action_copy_mermaid(self) -> None:
         """Kopiert den Seitenbaum als Mermaid-Diagramm in die Zwischenablage."""
         if not self._root_url:
-            self.app.notify("Kein Baum vorhanden.", severity="warning")
+            self.app.notify(t("notify.no_tree"), severity="warning")
             return
 
         lines = ["graph TD"]
@@ -274,12 +272,12 @@ class TreeScreen(ModalScreen):
 
         text = "\n".join(lines)
         self.app.copy_to_clipboard(text)
-        self.app.notify(f"Mermaid-Diagramm kopiert ({counter} Knoten)")
+        self.app.notify(t("notify.mermaid_copied", count=counter))
 
     def action_copy_ascii(self) -> None:
         """Kopiert den Seitenbaum als ASCII-Baum in die Zwischenablage."""
         if not self._root_url:
-            self.app.notify("Kein Baum vorhanden.", severity="warning")
+            self.app.notify(t("notify.no_tree"), severity="warning")
             return
 
         lines: list[str] = []
@@ -292,7 +290,7 @@ class TreeScreen(ModalScreen):
         text = "\n".join(lines)
         self.app.copy_to_clipboard(text)
         node_count = len(lines)
-        self.app.notify(f"ASCII-Baum kopiert ({node_count} Knoten)")
+        self.app.notify(t("notify.ascii_copied", count=node_count))
 
     def _build_ascii_subtree(
         self,
@@ -346,7 +344,7 @@ class TreeScreen(ModalScreen):
         """Klappt alle Knoten im Baum auf."""
         tree_widget = self.query_one("#site-tree", Tree)
         tree_widget.root.expand_all()
-        self.app.notify("Baum aufgeklappt")
+        self.app.notify(t("notify.tree_expanded"))
 
     def action_collapse_all(self) -> None:
         """Klappt alle Knoten im Baum zu."""
@@ -354,7 +352,7 @@ class TreeScreen(ModalScreen):
         tree_widget.root.collapse_all()
         # Root wieder aufklappen damit man etwas sieht
         tree_widget.root.expand()
-        self.app.notify("Baum eingeklappt")
+        self.app.notify(t("notify.tree_collapsed"))
 
     def action_close(self) -> None:
         """Schliesst den Dialog."""

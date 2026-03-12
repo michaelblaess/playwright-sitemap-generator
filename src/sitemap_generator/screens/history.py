@@ -14,6 +14,7 @@ from textual.containers import Vertical
 from textual.screen import ModalScreen
 from textual.widgets import DataTable, Static
 
+from ..i18n import t
 from ..models.history import History, HistoryEntry
 
 
@@ -67,8 +68,8 @@ class HistoryScreen(ModalScreen[HistoryEntry | None]):
     """
 
     BINDINGS = [
-        Binding("escape", "close", "Schliessen"),
-        Binding("q", "close", "Schliessen"),
+        Binding("escape", "close", "Close"),
+        Binding("q", "close", "Close"),
     ]
 
     def __init__(self, **kwargs) -> None:
@@ -80,18 +81,21 @@ class HistoryScreen(ModalScreen[HistoryEntry | None]):
         self._entries = History.load()
 
         with Vertical():
-            yield Static("Crawl-History", id="history-title")
+            yield Static(t("history.title"), id="history-title")
 
             if not self._entries:
                 yield Static(
-                    "Noch keine Crawls in der History.\n\n"
-                    "Starte einen Crawl mit einer URL,\n"
-                    "dann erscheint er hier.",
+                    t("history.empty"),
                     id="history-empty",
                 )
             else:
                 table = DataTable(id="history-table", cursor_type="row")
-                table.add_columns("#", "Datum", "URL", "Parameter")
+                table.add_columns(
+                    t("history.col_number"),
+                    t("history.col_date"),
+                    t("history.col_url"),
+                    t("history.col_params"),
+                )
                 for idx, entry in enumerate(self._entries, start=1):
                     # Datum kuerzen
                     date_str = entry.timestamp[:16].replace("T", " ") if entry.timestamp else "?"
@@ -125,7 +129,7 @@ class HistoryScreen(ModalScreen[HistoryEntry | None]):
 
                 yield table
 
-            yield Static("Enter = Auswaehlen  |  ESC/q = Schliessen", id="history-footer")
+            yield Static(t("history.footer"), id="history-footer")
 
     def on_mount(self) -> None:
         """Fokussiert die Tabelle nach dem Oeffnen."""

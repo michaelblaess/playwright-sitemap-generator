@@ -8,6 +8,7 @@ from textual.app import ComposeResult
 from textual.message import Message
 from textual.widgets import DataTable, Input, Static
 
+from ..i18n import t
 from ..models.crawl_result import CrawlResult, PageStatus
 
 
@@ -62,14 +63,21 @@ class UrlTable(Static):
     def compose(self) -> ComposeResult:
         """Erstellt die DataTable mit Filter-Eingabe."""
         yield Static("", id="results-count")
-        yield Input(placeholder="Filter (URL, Status...)", id="filter-bar")
+        yield Input(placeholder=t("table.filter_placeholder"), id="filter-bar")
         yield DataTable(id="url-data", cursor_type="row")
 
     def on_mount(self) -> None:
         """Initialisiert die Tabellenspalten und startet den Spinner-Timer."""
         table = self.query_one("#url-data", DataTable)
         self._col_keys = table.add_columns(
-            "#", "Status", "HTTP", "Tiefe", "Links", "Formular (?)", "Zeit", "URL",
+            t("table.columns.number"),
+            t("table.columns.status"),
+            t("table.columns.http"),
+            t("table.columns.depth"),
+            t("table.columns.links"),
+            t("table.columns.form"),
+            t("table.columns.time"),
+            t("table.columns.url"),
         )
         self._spinner_timer = self.set_interval(0.3, self._tick_spinner)
 
@@ -261,9 +269,9 @@ class UrlTable(Static):
         shown = len(self._filtered)
         count_label = self.query_one("#results-count", Static)
         if total == shown:
-            count_label.update(f" {total} URLs")
+            count_label.update(t("table.count", count=total))
         else:
-            count_label.update(f" {shown} von {total} URLs (gefiltert)")
+            count_label.update(t("table.count_filtered", shown=shown, total=total))
 
     def clear_results(self) -> None:
         """Leert alle Ergebnisse und die Tabelle."""
